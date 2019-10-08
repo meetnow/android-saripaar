@@ -1,38 +1,81 @@
-import com.android.builder.core.BuilderConstants
-
 apply plugin: 'com.android.library'
-apply from: '../config/quality.gradle'
+apply plugin: "com.jfrog.artifactory"
+apply plugin: 'maven-publish'
+
+def libraryVersion = '2.1.0'
 
 android {
-    compileSdkVersion Integer.parseInt(project.ANDROID_BUILD_SDK_VERSION)
-    buildToolsVersion project.ANDROID_BUILD_TOOLS_VERSION
+    compileSdkVersion 27
+    buildToolsVersion '27.0.3'
 
     lintOptions {
         abortOnError false
     }
     defaultConfig {
-        minSdkVersion 8
-        targetSdkVersion 25
-    }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_6
-        targetCompatibility JavaVersion.VERSION_1_6
-    }
-    libraryVariants.all { variant ->
-        def name = variant.buildType.name
-        if (name.equals(BuilderConstants.DEBUG)) {
-            return; // Skip debug builds.
-        }
-        def task = project.tasks.create "jar${name.capitalize()}", Jar
-        task.dependsOn variant.javaCompile
-        task.from variant.javaCompile.destinationDir
-        artifacts.add('archives', task);
+        minSdkVersion 21
+        targetSdkVersion 27
+        versionName libraryVersion
     }
 }
 
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
-    compile 'com.android.support:support-annotations:23.1.1'
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'com.android.support:support-annotations:23.1.1'
 }
 
-apply from: '../gradle-mvn-push.gradle'
+publishing {
+    publications {
+        aar(MavenPublication) {
+            groupId 'com.mobsandgeeks'
+            version libraryVersion
+            artifactId project.getName()
+
+            // Tell maven to prepare the generated "*.aar" file for publishing
+            artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
+
+            // add dependencies to pom-file since the normal `dependecies` dont get included automatically
+            pom.withXml {
+                def dependenciesNode = asNode().appendNode('dependencies')
+                configurations.implementation.allDependencies.each { dependency ->
+                    if (dependency.group != null) {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', dependency.group)
+                        dependencyNode.appendNode('artifactId', dependency.name)
+                        dependencyNode.appendNode('version', dependency.version)
+                    }
+                }
+            }
+        }
+    }
+}
+
+def artifactoryProps = new Properties()
+file("../artifactory.properties").withInputStream { artifactoryProps.load(it) }
+
+artifactory {
+    contextUrl = artifactoryProps.getProperty("artifactory_contextUrl")
+    //The base Artifactory URL if not overridden by the publisher/resolver
+    publish {
+        repository {
+            repoKey = 'gradle-dev-local'
+            username = artifactoryProps.getProperty("artifactory_user")
+            password = artifactoryProps.getProperty("artifactory_password")
+
+        }
+        defaults {
+            publications('aar')
+            publishArtifacts = true
+            // Publish generated POM files to Artifactory (true by default)
+            publishPom = true
+        }
+    }
+    resolve {
+        repository {
+            repoKey = 'gradle-dev'
+            username = artifactoryProps.getProperty("artifactory_user")
+            password = artifactoryProps.getProperty("artifactory_password")
+
+        }
+    }
+}
+

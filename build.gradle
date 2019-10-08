@@ -2,24 +2,33 @@
 
 buildscript {
     repositories {
+        google()
         mavenCentral()
+        jcenter()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.1.3'
+        classpath 'com.android.tools.build:gradle:3.1.2'
+        classpath 'org.jfrog.buildinfo:build-info-extractor-gradle:4.7.0'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
     }
 }
 
-allprojects {
-    version = VERSION_NAME
-    group = GROUP
+def artifactoryProps = new Properties()
+file("artifactory.properties").withInputStream { artifactoryProps.load(it) }
 
+
+allprojects {
     repositories {
-        mavenCentral()
+        jcenter()
+        google()
         maven {
-            url "https://oss.sonatype.org/content/repositories/snapshots/"
+            url artifactoryProps.getProperty("artifactory_contextUrl")  + "/gradle-dev-local/"
+            credentials {
+                username artifactoryProps.getProperty("artifactory_user")
+                password artifactoryProps.getProperty("artifactory_password")
+            }
         }
     }
 }
